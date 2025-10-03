@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Web Crawler</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css"/>
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+  <style>
+    /* Basic page styling */
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 2rem;
+      background-color: #f5f5f5;
+      color: #333;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      background: #fff;
+      padding: 1.5rem;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    h1 {
+      margin-bottom: 1rem;
+      text-align: center;
+      font-size: 1.8rem;
+    }
+    h2 {
+      margin-top: 2rem;
+      font-size: 1.4rem;
+    }
+
+    /* Form elements */
+    .form-group {
+      margin-bottom: 1rem;
+    }
+    label {
+      margin-right: 1.5rem;
+      cursor: pointer;
+    }
+    input[type="radio"] {
+      margin-right: 0.25rem;
+      transform: scale(1.2);
+      vertical-align: middle;
+      cursor: pointer;
+    }
+    input[type="url"] {
+      width: 95%;
+      padding: 0.75rem;
+      margin-top: 0.5rem;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    button[type="submit"] {
+      background-color: #007BFF;
+      color: #fff;
+      padding: 0.75rem 1.5rem;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 1rem;
+    }
+    button[type="submit"]:hover {
+      background-color: #0056b3;
+    }
+
+    /* Status section */
+    #status-section {
+      margin-top: 2rem;
+      display: none;
+    }
+    .status-item {
+      margin: 0.25rem 0;
+    }
+    .status-label {
+      font-weight: bold;
+    }
+    #scraping-completed {
+      margin-top: 1rem;
+      color: green;
+      font-weight: bold;
+    }
+    .hidden {
+      display: none;
+    }
+    .text-center {
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <h1><i class="fas fa-spider"></i> Web Crawler</h1>
+
+    <form id="scrape-form">
+      <div class="form-group">
+        <label>
+          <input type="radio" name="scrape_mode" value="single" checked>
+          Single Page
+        </label>
+        <label>
+          <input type="radio" name="scrape_mode" value="sitemap">
+          Full Sitemap
+        </label>
+      </div>
+
+      <div class="form-group">
+        <input
+          type="url"
+          id="scrape-url"
+          name="scrape_url"
+          placeholder="Enter URL or Sitemap"
+          required
+        />
+      </div>
+
+      <button type="submit">
+        <i class="fas fa-play"></i> Start Scraping
+      </button>
+    </form>
+
+    <!-- Status section -->
+    <div id="status-section">
+      <h2><i class="fas fa-info-circle"></i> Status Updates</h2>
+      <p class="status-item">
+        <span class="status-label">Scraped Pages:</span>
+        <span id="scraped-pages">0</span>
+      </p>
+      <p class="status-item">
+        <span class="status-label">Remaining Pages:</span>
+        <span id="remaining-pages">0</span>
+      </p>
+      <p class="status-item">
+        <span class="status-label">Currently Scraping:</span>
+        <span id="current-url">None</span>
+      </p>
+      <p class="status-item">
+        <span class="status-label">Total Characters Scraped:</span>
+        <span id="total-chars">0</span>
+      </p>
+      <p id="scraping-completed" class="hidden">
+        🎉 Scraping Completed! 🎉
+      </p>
+    </div>
+  </div>
+
+  <script>
+    var pollingInterval;
+    var userId = "1"; // Variable to store the user ID returned from the scraping request
+
+    function updateStatus() {
+      // Include the user_id in the URL for the status check
+      if (!userId) {
+        console.log("User ID is not set");
+        return;
+      }
+
+      $.get(`/api/scrape/status/${userId}/`, function (data) {
+        if (data.error) {
+          console.log("Error fetching scrape status:", data.error);
+          return;
+        }
+        $("#scraped-pages").text(data.scraped_pages);
+        $("#remaining-pages").text(data.remaining_pages);
+        $("#current-url").text(data.current_url || "None");
+        $("#total-chars").text(data.total_characters_scraped);
+
+        // Check if scraping is done
+        if (data.remaining_pages === 0 && data.is_scraping === false) {
+          // Stop the polling
+          clearInterval(pollingInterval);
+          
+          // Show completion message
+          $("#scraping-completed").removeClass("hidden");
+
+          // Optionally, you can hide the status section or update it.
+          // $("#status-section").hide(); // Uncomment this line if you want to hide the status section after completion.
+        }
+      });
+    }
+
+    $(document).ready(function () {
+      $("#scrape-form").on("submit", function (e) {
+        e.preventDefault();
+
+        var scrape_mode = $("input[name='scrape_mode']:checked").val();
+        var scrape_url = $("#scrape-url").val();
+
+        // Check if the required fields are populated
+        if (!scrape_url || !scrape_mode) {
+          alert("Please provide both the scrape URL and scrape mode.");
+          return;
+        }
+
+        // Create the JSON payload
+        var data = JSON.stringify({
+          "scrape_url": scrape_url,
+          "scrape_mode": scrape_mode,
+          "user_id": "1", // Make sure to replace this with actual user ID if applicable
+          "rem_link": 10 // Replace with actual available links or quota
+        });
+
+        // Send JSON data via POST request
+        $.ajax({
+          url: "/api/scrape/", // Make sure this is the correct URL
+          type: "POST",
+          contentType: "application/json",  // Make sure contentType is set to application/json
+          data: data,
+          success: function (response) {
+            alert("Scraping started! Status will update live.");
+          },
+          error: function (xhr, status, error) {
+            console.log("Error: " + error);
+            alert("There was an error starting the scrape.");
+          }
+        });
+
+        // Show the status section
+        $("#status-section").show();
+
+        // Start polling for status updates every second
+        pollingInterval = setInterval(updateStatus, 1000);
+      });
+    });
+</script>
+
+</body>
+</html>
